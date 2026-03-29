@@ -1,4 +1,9 @@
--- Quick test to verify source connection works
-select unique_key, created_date, complaint_type, borough
-from {{ source("raw", "source_dot_service_requests_history") }}
-LIMIT 10
+SELECT
+    LENGTH(CAST(zip AS STRING)) AS zip_length,
+    zip,
+    COUNT(*) AS count
+ FROM {{ source('raw', 'source_nyc_open_restaurant_apps') }}
+WHERE zip IS NOT NULL
+  AND LENGTH(CAST(zip AS STRING)) != 5
+GROUP BY zip_length, zip
+ORDER BY count DESC
