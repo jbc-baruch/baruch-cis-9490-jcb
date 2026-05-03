@@ -19,16 +19,21 @@ clean-targets:
 models:
   nyc_analytics:
     +materialized: table
+
     work:
       staging:
         +materialized: table
         +schema: gr_proj_staging
+
       marts:
         +materialized: table
         +schema: gr_proj_marts
+
         shared:
           +materialized: table
+
         drug_activity_311:
           +materialized: table
+
         shooting_incidents:
           +materialized: table
