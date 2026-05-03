@@ -1,30 +1,40 @@
-{{ config(materialized='table') }}
+-- Fact table for NYPD shooting victim incidents
+WITH victims AS (
+    SELECT * FROM {{ ref('stg_nyc_shooting_victims') }}
+),
+incidents AS (
+    SELECT * FROM {{ ref('stg_nyc_shooting_incidents') }}
+),
+dim_date AS (SELECT * FROM {{ ref('dim_date') }}),
+dim_time AS (SELECT * FROM {{ ref('dim_time') }}),
+dim_region AS (SELECT * FROM {{ ref('dim_region') }}),
+dim_victim AS (SELECT * FROM {{ ref('dim_victim_details') }}),
+dim_inc_addr AS (SELECT * FROM {{ ref('dim_incident_address') }}),
 
-SELECT
-  ROW_NUMBER() OVER() AS victim_incident_key,
-  SAFE_CAST(i.incident_key AS INT64) AS incident_id,
-  SAFE_CAST(v.victim_id AS INT64) AS victim_id,
-
-  vd.victim_details_key,
-
-  dt.date_time_key AS ocurr_datetime_key,
-  sa.incident_address_key,
-
-  SAFE_CAST(i.latitude AS FLOAT64) AS incident_latitude,
-  SAFE_CAST(i.longitude AS FLOAT64) AS incident_longitude
-
-FROM {{ ref('stg_shooting_incident') }} i
-
-LEFT JOIN {{ ref('stg_shooting_victims') }} v
-  ON i.incident_key = v.incident_key
-
-LEFT JOIN {{ ref('dim_victim_details') }} vd
-  ON v.victim_age_group = vd.age_group
-  AND v.victim_sex = vd.gender
-  AND v.victim_race = vd.race
-
-LEFT JOIN {{ ref('dim_datetime') }} dt
-  ON SAFE_CAST(i.occur_date AS DATETIME) = dt.full_date_time
-
-LEFT JOIN {{ ref('dim_shooting_address') }} sa
-  ON i.boro = sa.incident_borough
+fact AS (
+    SELECT
+        {{ dbt_utils.generate_surrogate_key(['v.victim_id']) }} AS victim_incident_key,
+        i.incident_id,
+        v.victim_id,
+        dv.victim_details_key,
+        d.date_key AS incident_date_key,
+        t.time_key AS incident_time_key,
+        rg.region_key,
+        dia.incident_address_key,
+        i.latitude AS incident_latitude,
+        i.longitude AS incident_longitude
+    FROM victims v
+    LEFT JOIN incidents i ON v.incident_id = i.incident_id
+    LEFT JOIN dim_date d ON i.occur_date = d.full_date
+    LEFT JOIN dim_time t ON i.occur_time = t.full_time
+    LEFT JOIN dim_region rg ON i.borough = rg.borough
+        AND i.police_precinct = rg.police_precinct
+    LEFT JOIN dim_victim dv ON v.victim_age_group = dv.age_group
+        AND v.victim_sex = dv.gender
+        AND v.victim_race = dv.race
+        AND v.murder_flag = dv.murder_flag
+    LEFT JOIN dim_inc_addr dia ON i.location_desc = dia.incident_address_desc
+        AND i.loc_classfctn_desc = dia.incident_address_type
+        AND i.loc_of_occur_desc = dia.incident_in_out
+)
+SELECT * FROM fact
